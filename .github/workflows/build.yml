@@ -30,9 +30,9 @@ jobs:
       - name: Prepare
         run: |
           sudo apt update
-          sudo apt install libtool-bin gperf pythsudo apt-get install -y software-properties-common
+          sudo apt install libtool-bin gperf python3-docutils autopoint gettext ccache
+          sudo apt install -y software-properties-common
           sudo add-apt-repository -y ppa:ubuntu-toolchain-r/test
-          sudo apt-get update
           sudo apt-get install -y g++-10 gcc-10
           
       # 设置 GCC/G++ 10 为默认编译器
