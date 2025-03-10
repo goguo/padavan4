@@ -1,0 +1,81 @@
+name: build
+
+on: 
+  push:
+    branches:
+    - "*"
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-22.04
+    strategy:
+      matrix:
+        target: [R2100]
+        toolchain: [mipsel-linux-musl]
+    steps:
+      - uses: actions/checkout@v3
+      - uses: hendrikmuhs/ccache-action@v1.2
+        with:
+          key: ${{ matrix.target }}-${{ matrix.toolchain }}
+      - uses: actions/setup-go@v4
+        with:
+          go-version: '1.20'
+          check-latest: true
+          cache: false
+      - uses: actions/setup-node@v3
+        with:
+          node-version: 18
+          check-latest: true
+      - name: Prepare
+        run: |
+          sudo apt update
+          sudo apt install libtool-bin gperf python3-docutils autopoint gettext ccache
+          sudo apt install -y software-properties-common
+          sudo add-apt-repository -y ppa:ubuntu-toolchain-r/test
+          sudo apt-get install -y g++-10 gcc-10
+          
+      # 设置 GCC/G++ 10 为默认编译器
+      - name: Set default GCC/G++ 10
+        run: |
+          sudo update-alternatives --install /usr/bin/gcc gcc /usr/bin/gcc-10 100
+          sudo update-alternatives --install /usr/bin/g++ g++ /usr/bin/g++-10 100
+          sudo update-alternatives --set gcc /usr/bin/gcc-10
+          sudo update-alternatives --set g++ /usr/bin/g++-10
+
+      # 验证 GCC/G++ 10 是否安装成功
+      - name: Verify GCC/G++ 10 installation
+        run: |
+          gcc --version
+          g++ --version     
+          
+      - name: Build
+        run: |
+          make ${{ matrix.target }} TOOLCHAIN=${{ matrix.toolchain }}
+          if [ "${{ matrix.target }}" = "K2P-NANO" ]; then
+            image=$(ls trunk/images/*.trx)
+            mv $image $(echo $image | sed 's/K2P/K2P-NANO/')
+          fi
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.toolchain }}
+          path: trunk/images/*.trx
+  publish:
+    needs: [build]
+    runs-on: ubuntu-22.04
+    if: ${{ github.ref == 'refs/heads/main' }}
+    steps:
+      - uses: actions/checkout@v3
+      - uses: actions/download-artifact@v3
+      - name: Set Tag Name
+        run: echo "TAG_ANME=$(date +%Y%m%d)" >> $GITHUB_ENV
+      - uses: rickstaa/action-create-tag@v1
+        with:
+          tag: ${{ env.TAG_ANME }}
+          force_push_tag: true
+      - uses: ncipollo/release-action@v1
+        with:
+          commit: ${{ github.sha }}
+          tag: ${{ env.TAG_ANME }}
+          artifacts: "mipsel-linux-musl/*.trx"
+          allowUpdates: true
